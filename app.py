@@ -2,11 +2,35 @@ import streamlit as st
 import os
 import tempfile
 import uuid
-import ffmpeg
+import cv2
 from PIL import Image
 import chromadb
 from chromadb.utils.embedding_functions import OpenCLIPEmbeddingFunction
 from chromadb.utils.data_loaders import ImageLoader
+
+# Função para extrair 1 frame por segundo usando OpenCV
+def extract_frames_opencv(video_path, output_dir):
+    os.makedirs(output_dir, exist_ok=True)
+    cap = cv2.VideoCapture(video_path)
+
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    duration = int(frame_count / fps) if fps > 0 else 0
+
+    st.info(f"Video FPS: {fps:.2f}, total frames: {frame_count}, duration (s): {duration}")
+
+    for sec in range(duration):
+        frame_id = int(sec * fps)
+        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_id)
+        success, frame = cap.read()
+        if not success:
+            continue
+        
+        filename = os.path.join(output_dir, f"frame_{sec:04d}.jpg")
+        cv2.imwrite(filename, frame)
+        st.text(f"Saved frame at second {sec} -> {filename}")
+
+    cap.release()
 
 # App title
 st.title("🎥 Movie Explorer with OpenCLIP + ChromaDB")
@@ -33,17 +57,9 @@ if uploaded_video and movie_title:
             f.write(uploaded_video.read())
 
         frame_dir = os.path.join(tmp_dir, "frames")
-        os.makedirs(frame_dir, exist_ok=True)
 
-        st.info("Extracting 1 frame per second...")
-
-        (
-            ffmpeg
-            .input(video_path)
-            .filter("fps", fps=1)
-            .output(os.path.join(frame_dir, "frame_%04d.jpg"), start_number=0)
-            .run(quiet=True, overwrite_output=True)
-        )
+        st.info("Extracting 1 frame per second using OpenCV...")
+        extract_frames_opencv(video_path, frame_dir)
 
         # Register movie collection
         collection_name = f"movie_{movie_title.lower().replace(' ', '_')}"
